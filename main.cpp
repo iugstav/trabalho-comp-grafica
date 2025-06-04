@@ -17,10 +17,10 @@ float rotationX = 20.0f;
 float rotationY = 180.0f;
 
 // visão e escala
-float zoom = 5.0f;
+float zoom = 10.0f;
 float scaleX = 1.0f;
 float scaleY = 1.0f;
-float scaleZ = 1.0f;
+float scaleZ = .2f;
 
 // visualização do wireframe
 bool wireframe = false;
@@ -114,9 +114,10 @@ void display() {
 	// Aplicar rotações
 	glRotatef(rotationX, 1.0f, 0.0f, 0.0f);
 	glRotatef(rotationY, 0.0f, 1.0f, 0.0f);
+	glRotatef(-90.0f, 1.0f, 0.0f, 0.0f);
 
 	// Translação para centralizar o gráfico
-	glTranslatef(-1.0f * scaleX, -0.5f * scaleY, 0.0f);
+	glTranslatef(-1.0f * scaleX, 0.0f, -5.0f * scaleZ);
 
 	// Aplicar escala
 	glScalef(scaleX, scaleY, scaleZ);
@@ -226,14 +227,16 @@ void keyboard(unsigned char key, int x, int y) {
 		zoom += 0.5f;
 		break;
 	case 'r':
-		scaleX = scaleY = scaleZ = 1.0f;
-		zoom = 5.0f;
+		scaleZ = .2f;
+		scaleX = scaleY = 1.0f;
+		zoom = 10.0f;
 		break;
 	case 'R':
 		rotationX = 20.0f;
 		rotationY = 180.0f;
-		zoom = 5.0f;
-		scaleX = scaleY = scaleZ = 1.0f;
+		zoom = 10.0f;
+		scaleZ = .2f;
+		scaleX = scaleY = 1.0f;
 		break;
 	case 'x':
 		scaleX += 0.1f;
@@ -257,9 +260,9 @@ void keyboard(unsigned char key, int x, int y) {
 		scaleZ += 0.1f;
 		break;
 	case 'Z':
-		scaleZ -= 0.1f;
-		if (scaleZ < 0.1f)
-			scaleZ = 0.1f;
+		scaleZ -= 0.05f;
+		if (scaleZ < 0.05f)
+			scaleZ = 0.05f;
 		break;
 	// Escala uniforme
 	case 's':

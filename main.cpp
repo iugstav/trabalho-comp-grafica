@@ -117,10 +117,10 @@ void display() {
 	glRotatef(-90.0f, 1.0f, 0.0f, 0.0f);
 
 	// Translação para centralizar o gráfico
-	glTranslatef(-1.0f * scaleX, 0.0f, -5.0f * scaleZ);
+	glTranslatef(-1.0f * scaleX, 0.0f, -3.0f * scaleZ);
 
 	// Aplicar escala
-	glScalef(scaleX, scaleY, scaleZ);
+	glScalef(scaleX, scaleY, 0.5f * scaleZ);
 
 	float maxValue = getMaxSolutionValue();
 
@@ -132,49 +132,27 @@ void display() {
 	}
 
 	// Desenha a malha
-	for (int i = 0; i < N; i++) {
-		for (int j = 0; j < M; j++) {
-			float x1, y1, x2, y2, z1, z2, z3, z4;
+	for (int i = 0; i < N; ++i) {
+		glBegin(GL_TRIANGLE_STRIP);
+		for (int j = 0; j <= M; ++j) {
+			float x1, y1, x2, y2;
 
-			// Calcula coordenadas dos vértices
+			// Ponto na “linha” i
 			getCoordinates(i, j, x1, y1);
-			getCoordinates(i + 1, j, x2, y1);
-			getCoordinates(i, j + 1, x1, y2);
-			getCoordinates(i + 1, j + 1, x2, y2);
+			float s1 = getSolutionValue(i, j);
+			// Ponto na “linha” i+1
+			getCoordinates(i + 1, j, x2, y2);
+			float s2 = getSolutionValue(i + 1, j);
 
-			// Obtém valores da solução nos vértices
-			z1 = getSolutionValue(i, j);
-			z2 = getSolutionValue(i + 1, j);
-			z3 = getSolutionValue(i, j + 1);
-			z4 = getSolutionValue(i + 1, j + 1);
+			// Vértice (x, altura, z)
+			setColorByValue(s1, maxValue);
+			glVertex3f(x1, y1, s1);
 
-			// Desenha dois triângulos para formar um quad
-			glBegin(GL_TRIANGLES);
-
-			// Primeiro triângulo
-			setColorByValue(z1, maxValue);
-			glVertex3f(x1, y1, z1);
-
-			setColorByValue(z2, maxValue);
-			glVertex3f(x2, y1, z2);
-
-			setColorByValue(z4, maxValue);
-			glVertex3f(x2, y2, z4);
-
-			// Segundo triângulo
-			setColorByValue(z1, maxValue);
-			glVertex3f(x1, y1, z1);
-
-			setColorByValue(z4, maxValue);
-			glVertex3f(x2, y2, z4);
-
-			setColorByValue(z3, maxValue);
-			glVertex3f(x1, y2, z3);
-
-			glEnd();
+			setColorByValue(s2, maxValue);
+			glVertex3f(x2, y2, s2);
 		}
+		glEnd();
 	}
-
 	// Desenha os eixos
 	glLineWidth(2.0f);
 	glBegin(GL_LINES);
@@ -227,16 +205,15 @@ void keyboard(unsigned char key, int x, int y) {
 		zoom += 0.5f;
 		break;
 	case 'r':
-		scaleZ = .2f;
-		scaleX = scaleY = 1.0f;
+		scaleX = scaleY = scaleZ = 1.0f;
 		zoom = 10.0f;
 		break;
 	case 'R':
 		rotationX = 20.0f;
 		rotationY = 180.0f;
 		zoom = 10.0f;
-		scaleZ = .2f;
-		scaleX = scaleY = 1.0f;
+		scaleZ = 1.0f;
+		scaleX = scaleY = scaleZ = 1.0f;
 		break;
 	case 'x':
 		scaleX += 0.1f;

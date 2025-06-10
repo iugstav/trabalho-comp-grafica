@@ -12,15 +12,28 @@ const float k = 1.0f / float(M); // número de passos em y
 // Variáveis globais
 float *solution = nullptr;
 
-// rotação
-float rotationX = 20.0f;
-float rotationY = 180.0f;
+float maxValue = 1.0f;
 
-// visão e escala
-float zoom = 10.0f;
-float scaleX = 1.0f;
-float scaleY = 1.0f;
-float scaleZ = .2f;
+// Ponto central do gráfico (alvo). Ajuste conforme a posição real do seu gráfico.
+// Por exemplo, se a superfície está centrada em (1, 0, 0.5) no mundo, use esses valores.
+// Aqui assumo centro em (1.0f, 0.0f, 0.5f) ou simplesmente (0,0,0) se você transladar a malha.
+float targetX = 0.0f, targetY = 0.0f, targetZ = 0.0f;
+
+// Parâmetros polares da câmera em torno do alvo
+float radius = 5.0f; // distância inicial entre câmera e alvo
+float azimuth = 0.0f; // ângulo horizontal em graus (gira em torno do eixo Y do alvo)
+float elevation = 20.0f; // ângulo vertical em graus (inclinação acima do plano XZ)
+
+// Vetor “up” fixo. Normalmente (0,1,0).
+float upX = 0.0f, upY = 1.0f, upZ = 0.0f;
+
+// Parâmetros de sensibilidade
+const float angularSpeed = 5.0f; // graus por tecla para azimuth/elevation
+const float zoomSpeed = 0.5f; // quanto muda o radius por tecla
+const float panSpeed = 0.1f;
+
+float meshRotX = 0.0f; // rotação da malha em torno do eixo X local
+float meshRotY = 0.0f; // rotação da malha em torno do eixo Y local
 
 // visualização do wireframe
 bool wireframe = false;
@@ -103,57 +116,32 @@ void setColorByValue(float value, float maxValue) {
 	}
 }
 
-// Função para renderizar
-void display() {
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-	glLoadIdentity();
-
-	// Configurar câmera
-	gluLookAt(0.0, 0.0, zoom, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0);
-
-	// Aplicar rotações
-	glRotatef(rotationX, 1.0f, 0.0f, 0.0f);
-	glRotatef(rotationY, 0.0f, 1.0f, 0.0f);
-	glRotatef(-90.0f, 1.0f, 0.0f, 0.0f);
-
-	// Translação para centralizar o gráfico
-	glTranslatef(-1.0f * scaleX, 0.0f, -3.0f * scaleZ);
-
-	// Aplicar escala
-	glScalef(scaleX, scaleY, 0.5f * scaleZ);
-
-	float maxValue = getMaxSolutionValue();
-
-	// Define o modo de desenho
-	if (wireframe) {
-		glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-	} else {
-		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-	}
-
-	// Desenha a malha
+void drawMesh() {
+	// Desenha faixas entre i e i+1
 	for (int i = 0; i < N; ++i) {
 		glBegin(GL_TRIANGLE_STRIP);
 		for (int j = 0; j <= M; ++j) {
-			float x1, y1, x2, y2;
-
-			// Ponto na “linha” i
+			// ponto (i, j)
+			float x1, y1;
 			getCoordinates(i, j, x1, y1);
 			float s1 = getSolutionValue(i, j);
-			// Ponto na “linha” i+1
+			// ponto (i+1, j)
+			float x2, y2;
 			getCoordinates(i + 1, j, x2, y2);
 			float s2 = getSolutionValue(i + 1, j);
 
-			// Vértice (x, altura, z)
+			// Vértice: X, altura (s), profundidade (y)
 			setColorByValue(s1, maxValue);
-			glVertex3f(x1, y1, s1);
+			glVertex3f(x1, s1, y1);
 
 			setColorByValue(s2, maxValue);
-			glVertex3f(x2, y2, s2);
+			glVertex3f(x2, s2, y2);
 		}
 		glEnd();
 	}
-	// Desenha os eixos
+}
+
+void drawAxes() {
 	glLineWidth(2.0f);
 	glBegin(GL_LINES);
 
@@ -165,15 +153,56 @@ void display() {
 	// Eixo Y - verde
 	glColor3f(0.0f, 1.0f, 0.0f);
 	glVertex3f(0.0f, 0.0f, 0.0f);
-	glVertex3f(0.0f, 1.2f, 0.0f);
+	glVertex3f(0.0f, maxValue * 1.f, 0.0f);
 
 	// Eixo Z - azul
 	glColor3f(0.0f, 0.0f, 1.0f);
 	glVertex3f(0.0f, 0.0f, 0.0f);
-	glVertex3f(0.0f, 0.0f, maxValue * 1.2f);
+	glVertex3f(0.0f, 0.0f, 1.2f);
 
 	glEnd();
 	glLineWidth(1.0f);
+}
+
+// Função para renderizar
+void display() {
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+	float radAz = azimuth * M_PI / 180.0f;
+	float radEl = elevation * M_PI / 180.0f;
+	// Cálculo da posição da câmera em coordenadas esféricas em torno do alvo:
+	// camX = targetX + radius * cos(elevation) * sin(azimuth)
+	// camY = targetY + radius * sin(elevation)
+	// camZ = targetZ + radius * cos(elevation) * cos(azimuth)
+	float cosEl = cos(radEl);
+	float sinEl = sin(radEl);
+	float cosAz = cos(radAz);
+	float sinAz = sin(radAz);
+
+	float camX = targetX + radius * cosEl * sinAz;
+	float camY = targetY + radius * sinEl;
+	float camZ = targetZ + radius * cosEl * cosAz;
+
+	// Configura view matrix com gluLookAt
+	glMatrixMode(GL_MODELVIEW);
+	glLoadIdentity();
+	gluLookAt(camX, camY, camZ, targetX, targetY, targetZ, upX, upY, upZ);
+
+	// Define o modo de desenho
+	if (wireframe) {
+		glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+	} else {
+		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+	}
+
+	glPushMatrix();
+	glTranslatef(-targetX, -targetY, -targetZ);
+	glRotatef(meshRotX, 1, 0, 0);
+	glRotatef(meshRotY, 0, 1, 0);
+
+	drawAxes();
+	drawMesh();
+	glPopMatrix();
 
 	glutSwapBuffers();
 }
@@ -192,91 +221,88 @@ void keyboard(unsigned char key, int x, int y) {
 		delete[] solution;
 		exit(0);
 		break;
+
+	// Zoom (muda radius)
+	case 'u': // aproxima
+	case 'U':
+		radius -= zoomSpeed;
+		if (radius < 0.1f)
+			radius = 0.1f; // evita radius <= 0
+		break;
+	case 'j': // afasta
+	case 'J':
+		radius += zoomSpeed;
+		break;
+	case 'i':
+	case 'I':
+		targetY -= panSpeed;
+		break;
+	case 'k':
+	case 'K':
+		targetY += panSpeed;
+		break;
+	// Rotação local da malha
+	case 'a':
+	case 'A':
+		meshRotY -= angularSpeed; // gira malha em torno de Y local
+		break;
+	case 'd':
+	case 'D':
+		meshRotY += angularSpeed;
+		break;
 	case 'w':
 	case 'W':
+		meshRotX -= angularSpeed; // gira malha em torno de X local
+		break;
+	case 's':
+	case 'S':
+		meshRotX += angularSpeed;
+		break;
+	// Alterna wireframe
+	case 'f':
+	case 'F':
 		wireframe = !wireframe;
 		break;
-	case '+':
-		zoom -= 0.5f;
-		if (zoom < 1.1f)
-			zoom = 1.1f;
-		break;
-	case '-':
-		zoom += 0.5f;
-		break;
+
+	// Recentralizar orbit
 	case 'r':
-		scaleX = scaleY = scaleZ = 1.0f;
-		zoom = 10.0f;
-		break;
 	case 'R':
-		rotationX = 20.0f;
-		rotationY = 180.0f;
-		zoom = 10.0f;
-		scaleZ = 1.0f;
-		scaleX = scaleY = scaleZ = 1.0f;
+		radius = 5.0f;
+		azimuth = 0.0f;
+		elevation = 20.0f;
+		targetX = 1.0f;
+		targetY = 0.0f;
+		targetZ = 0.5f;
+		meshRotX = meshRotY = 0.0f;
 		break;
-	case 'x':
-		scaleX += 0.1f;
-		break;
-	case 'X':
-		scaleX -= 0.1f;
-		if (scaleX < 0.1f)
-			scaleX = 0.1f;
-		break;
-	// Escala Y
-	case 'y':
-		scaleY += 0.1f;
-		break;
-	case 'Y':
-		scaleY -= 0.1f;
-		if (scaleY < 0.1f)
-			scaleY = 0.1f;
-		break;
-	// Escala Z
-	case 'z':
-		scaleZ += 0.1f;
-		break;
-	case 'Z':
-		scaleZ -= 0.05f;
-		if (scaleZ < 0.05f)
-			scaleZ = 0.05f;
-		break;
-	// Escala uniforme
-	case 's':
-		scaleX += 0.1f;
-		scaleY += 0.1f;
-		scaleZ += 0.1f;
-		break;
-	case 'S':
-		scaleX -= 0.1f;
-		scaleY -= 0.1f;
-		scaleZ -= 0.1f;
-		if (scaleX < 0.1f)
-			scaleX = 0.1f;
-		if (scaleY < 0.1f)
-			scaleY = 0.1f;
-		if (scaleZ < 0.1f)
-			scaleZ = 0.1f;
-		break;
-	}
+	};
 	glutPostRedisplay();
 }
 
 void specialKeys(int key, int x, int y) {
 	switch (key) {
-	case GLUT_KEY_UP:
-		rotationX -= 5.0f;
-		break;
-	case GLUT_KEY_DOWN:
-		rotationX += 5.0f;
-		break;
 	case GLUT_KEY_LEFT:
-		rotationY -= 5.0f;
+		targetX -= panSpeed;
 		break;
 	case GLUT_KEY_RIGHT:
-		rotationY += 5.0f;
+		targetX += panSpeed;
+		break;
+	case GLUT_KEY_UP:
+		targetZ -= panSpeed;
+		break;
+	case GLUT_KEY_DOWN:
+		targetZ += panSpeed;
+		break;
+	case GLUT_KEY_PAGE_UP:
+		targetY += panSpeed;
+		break;
+	case GLUT_KEY_PAGE_DOWN:
+		targetY -= panSpeed;
+		break;
+	default:
 		break;
 	}
+
 	glutPostRedisplay();
 }
 
@@ -292,13 +318,12 @@ int main(int argc, char **argv) {
 	glEnable(GL_DEPTH_TEST);
 	glShadeModel(GL_SMOOTH);
 
-	scaleX = scaleY = scaleZ = 1.0f;
-
 	// Aloca memória para a solução
 	solution = new float[(N - 1) * (M - 1)];
 
 	// Calcula a solução numérica
 	SolPoisson(N, M, solution);
+	maxValue = getMaxSolutionValue();
 
 	std::cout << "Controles:\n";
 	std::cout << "Setas: Rotacionar visualização\n";

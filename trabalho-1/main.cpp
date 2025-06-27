@@ -15,7 +15,6 @@ float *solution = nullptr;
 float maxValue = 1.0f;
 
 // Ponto central do gráfico (alvo). Ajuste conforme a posição real do seu gráfico.
-// Aqui assumo centro em (1.0f, 0.0f, 0.5f) ou simplesmente (0,0,0) se você transladar a malha.
 float targetX = 0.0f, targetY = 1.5f, targetZ = 0.0f;
 
 // Parâmetros polares da câmera em torno do alvo
@@ -26,7 +25,7 @@ float elevation = 10.0f; // ângulo vertical em graus (inclinação acima do pla
 // Vetor “up” fixo. Normalmente (0,1,0).
 float upX = 0.0f, upY = 1.0f, upZ = 0.0f;
 
-// Parâmetros de sensibilidade
+// parâmetros de sensibilidade
 const float angularSpeed = 5.0f; // graus por tecla para azimuth/elevation
 const float zoomSpeed = 0.5f; // quanto muda o radius por tecla
 const float panSpeed = 0.1f;
@@ -37,15 +36,15 @@ float meshRotY = 0.0f; // rotação da malha em torno do eixo Y local
 // visualização do wireframe
 bool wireframe = false;
 
-// Função para converter índices da malha (i,j) para coordenadas (x,y)
+// converte os índices da malha (i,j) para coordenadas (x,y)
 void getCoordinates(int i, int j, float &x, float &y) {
 	x = (float)i * h;
 	y = (float)j * k;
 }
 
-// Função para obter o valor da solução no ponto (i,j)
+// obtém o valor da solução no ponto (i,j)
 float getSolutionValue(int i, int j) {
-	// Pontos interiores da malha
+	// pontos interiores da malha
 	if (i > 0 && i < N && j > 0 && j < M) {
 		return solution[(i - 1) + (j - 1) * (N - 1)];
 	}
@@ -53,7 +52,7 @@ float getSolutionValue(int i, int j) {
 	float x, y;
 	getCoordinates(i, j, x, y);
 
-	// Condições de contorno
+	// condições de contorno
 	if (i == 0)
 		return 0.0f; // u(0,y) = 0
 	if (i == N)
@@ -63,7 +62,7 @@ float getSolutionValue(int i, int j) {
 	if (j == M)
 		return expf(x); // u(x,1) = e^x
 
-	return 0.0f; // Nunca deve chegar aqui
+	return 0.0f;
 }
 
 // Calcula o valor máximo da solução para normalização
@@ -170,9 +169,6 @@ void display() {
 	float radAz = azimuth * M_PI / 180.0f;
 	float radEl = elevation * M_PI / 180.0f;
 	// Cálculo da posição da câmera em coordenadas esféricas em torno do alvo:
-	// camX = targetX + radius * cos(elevation) * sin(azimuth)
-	// camY = targetY + radius * sin(elevation)
-	// camZ = targetZ + radius * cos(elevation) * cos(azimuth)
 	float cosEl = cos(radEl);
 	float sinEl = sin(radEl);
 	float cosAz = cos(radAz);

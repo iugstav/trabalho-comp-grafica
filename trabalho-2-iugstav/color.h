@@ -47,8 +47,8 @@ Lab rgb2Lab(const RGB &pixel) {
 	const float delta = 6.0f / 29.0f;
 	auto f = [&](float t) -> float {
 		if (t > delta * delta * delta)
-			return std::cbrt(t);
-		return (t / (3 * delta * delta)) + (4.0f / 29.0f); // [TODO]: optimize
+			return std::cbrt(t); // [TODO]: otimizar
+		return (t / (3 * delta * delta)) + (4.0f / 29.0f); // [TODO]: otimizar
 	};
 
 	// conversão de XYZ para Lab
@@ -59,17 +59,18 @@ Lab rgb2Lab(const RGB &pixel) {
 	return lab;
 }
 
-const int grayLevels = 1024;
-std::vector<Lab> build_palette() {
-	std::vector<Lab> p;
-	for (int i = 0; i < grayLevels; ++i) {
-		unsigned char gray = static_cast<unsigned char>((255 * i) / (grayLevels - 1));
-		p.push_back(rgb2Lab({gray, gray, gray}));
+// constrói com base em `grayLevels` a paleta de tons de cinza
+std::vector<RGB> build_gray_Levels(const int levels) {
+	std::vector<RGB> l;
+	for (int i = 0; i < levels; ++i) {
+		unsigned char gray = static_cast<unsigned char>((255 * i) / (levels - 1));
+		l.push_back({gray, gray, gray});
 	}
 
-	return p;
+	return l;
 }
 
+// encontra o índice de cor mais próximo no espaço Lab
 int find_nearest_color(const Lab &pixel, const std::vector<Lab> &palette) {
 	int best_idx = 0;
 	float best_distance = std::numeric_limits<float>::max(), dist;

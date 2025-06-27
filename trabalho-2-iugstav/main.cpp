@@ -9,15 +9,14 @@ void atkinsonDither(const std::vector<RGB> &inData, std::vector<RGB> &outData, i
 		buf[i] = rgb2Lab(inData[i]);
 
 	// Paleta em Lab
-	auto palette = build_palette();
-	outData.resize(npix);
-
-	std::vector<RGB> levels;
-	for (int i = 0; i < grayLevels; ++i) {
-		unsigned char gray = static_cast<unsigned char>((255 * i) / (grayLevels - 1));
-		levels.push_back({gray, gray, gray});
+	const int grayLevels = 1024;
+	auto levels = build_gray_Levels(grayLevels);
+	std::vector<Lab> palette;
+	for (auto &l : levels) {
+		palette.push_back(rgb2Lab(l));
 	}
 
+	outData.resize(npix);
 	// Kernel de Atkinson
 	const int dx[6] = {1, 2, -1, 0, 1, 0};
 	const int dy[6] = {0, 0, 1, 1, 1, 2};

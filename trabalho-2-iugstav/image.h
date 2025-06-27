@@ -1,18 +1,13 @@
 #ifndef IMAGE_H
 #define IMAGE_H
 
+#include "color.h"
 #include <cmath>
 #include <fstream>
 #include <iostream>
 #include <vector>
 
-typedef struct {
-	unsigned char r;
-	unsigned char g;
-	unsigned char b;
-} pixel;
-
-bool readPPM(const std::string &filename, int &width, int &height, int &maxValue, std::vector<unsigned char> &pixels) {
+bool readPPM(const std::string &filename, std::vector<RGB> &pixels, int &width, int &height, int &maxValue) {
 	std::ifstream file(filename, std::ios::binary);
 
 	if (!file.is_open()) {
@@ -34,45 +29,47 @@ bool readPPM(const std::string &filename, int &width, int &height, int &maxValue
 	}
 
 	file >> width >> height;
-
 	file >> maxValue;
-
-	// Handle newline after header for P6 format
 	file.get();
 
 	// Error checking for header values
-	if (magicNumber != "P6" || width <= 0 || height <= 0 || maxValue <= 0 || maxValue > 255) {
+	if (width <= 0 || height <= 0 || maxValue <= 0 || maxValue > 255) {
 		std::cerr << "Error: Invalid PPM header in " << filename << std::endl;
 		file.close();
 		return false;
 	}
 
-	size_t imgSize = static_cast<size_t>(width) * height * 3;
-	pixels.resize(width * height * 3); // Resize vector to hold all pixels
-
-	file.read(reinterpret_cast<char *>(pixels.data()), imgSize);
+	int npix = width * height;
+	std::vector<unsigned char> raw(npix * 3);
+	file.read(reinterpret_cast<char *>(raw.data()), raw.size());
 	if (!file) {
-		std::cerr << "Erro ao ler dados da imagem, esperado " << imgSize << " bytes\n";
 		return false;
+	}
+
+	pixels.resize(npix);
+	for (int i = 0; i < npix; ++i) {
+		pixels[i] = {raw[3 * i], raw[3 * i + 1], raw[3 * i + 2]};
 	}
 
 	file.close();
 	return true;
 }
 
-bool writePPM(const std::string &filename, const std::vector<unsigned char> &data, int width, int height, int maxval) {
+bool writePPM(const std::string &filename, const std::vector<RGB> &data, int width, int height, int maxval) {
 	std::ofstream out(filename, std::ios::binary);
 	if (!out) {
 		std::cerr << "Erro ao abrir arquivo de saída: " << filename << "\n";
 		return false;
 	}
 	out << "P6\n" << width << " " << height << "\n" << maxval << "\n";
-	size_t imgSize = static_cast<size_t>(width) * height * 3;
-	out.write(reinterpret_cast<const char *>(data.data()), imgSize);
-	if (!out) {
-		std::cerr << "Erro ao escrever dados da imagem\n";
-		return false;
+
+	int pixels_num = width * height;
+	for (int i = 0; i < pixels_num; ++i) {
+		out.put(data[i].r);
+		out.put(data[i].g);
+		out.put(data[i].b);
 	}
+
 	return true;
 }
 

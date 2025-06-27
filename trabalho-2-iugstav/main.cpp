@@ -1,85 +1,69 @@
+#include "color.h"
 #include "image.h"
 #include <cmath>
 
-void atkinsonDither(const std::vector<unsigned char> &inData, std::vector<unsigned char> &outData, int width,
-		    int height) {
+void atkinsonDither(const std::vector<RGB> &inData, std::vector<RGB> &outData, int width, int height) {
+	int npix = width * height;
+	std::vector<Lab> buf(npix);
+	for (int i = 0; i < npix; ++i)
+		buf[i] = rgb2Lab(inData[i]);
 
-	size_t pixelsNum = static_cast<size_t>(width) * height;
-	std::vector<float> gray(pixelsNum);
+	// Paleta em Lab
+	auto palette = build_palette();
+	outData.resize(npix);
 
-	// algoritmo de conversão usando o padrão Rec. 601
-	for (int j = 0; j < height; ++j) {
-		for (int i = 0; i < width; ++i) {
-			size_t idx = (static_cast<size_t>(j) * width + i);
-			size_t base = idx * 3;
-			unsigned char r = inData[base];
-			unsigned char g = inData[base + 1];
-			unsigned char b = inData[base + 2];
-			gray[idx] = 0.299f * r + 0.587f * g + 0.114f * b;
-		}
+	std::vector<RGB> levels;
+	for (int i = 0; i < grayLevels; ++i) {
+		unsigned char gray = static_cast<unsigned char>((255 * i) / (grayLevels - 1));
+		levels.push_back({gray, gray, gray});
 	}
 
-	// dithering
-	float oldVal, newVal, err;
-	int idx;
+	// Kernel de Atkinson
+	const int dx[6] = {1, 2, -1, 0, 1, 0};
+	const int dy[6] = {0, 0, 1, 1, 1, 2};
+
 	for (int y = 0; y < height; ++y) {
 		for (int x = 0; x < width; ++x) {
-			idx = y * width + x;
-			oldVal = gray[idx];
-			newVal = (oldVal < 128.0f ? 0.0f : 255.0f);
-			err = oldVal - newVal;
-			gray[idx] = newVal;
+			int idx = y * width + x;
+			Lab oldLab = buf[idx];
+			int pi = find_nearest_color(oldLab, palette);
+			Lab best = palette[pi];
 
-			const float factor = err * 0.125f; // divide por 8
-			// (x+1, y)
-			if (x + 1 < width) {
-				gray[y * width + (x + 1)] += factor;
-			}
-			// (x+2, y)
-			if (x + 2 < width) {
-				gray[y * width + (x + 2)] += factor;
-			}
-			// (x-1, y+1)
-			if (y + 1 < height && x - 1 >= 0) {
-				gray[(y + 1) * width + (x - 1)] += factor;
-			}
-			// (x, y+1)
-			if (y + 1 < height) {
-				gray[(y + 1) * width + x] += factor;
-			}
-			// (x+1, y+1)
-			if (y + 1 < height && x + 1 < width) {
-				gray[(y + 1) * width + (x + 1)] += factor;
-			}
-			// (x, y+2)
-			if (y + 2 < height) {
-				gray[(y + 2) * width + x] += factor;
+			// Convertendo paleta de volta a RGB
+			outData[idx] = levels[pi];
+
+			// Erro em Lab
+			Lab err;
+			err.L = oldLab.L - best.L;
+			err.a = oldLab.a - best.a;
+			err.b = oldLab.b - best.b;
+			// Fixar pixel
+			buf[idx] = best;
+			// Difundir erro
+			for (int k = 0; k < 6; ++k) {
+				int nx = x + dx[k];
+				int ny = y + dy[k];
+
+				if (nx < 0 || nx >= width || ny < 0 || ny >= height)
+					continue;
+
+				int nidx = ny * width + nx;
+				buf[nidx].L += err.L / 8.0f;
+				buf[nidx].a += err.a / 8.0f;
+				buf[nidx].b += err.b / 8.0f;
 			}
 		}
-	}
-	// Monta saída: cada pixel se torna (v,v,v) com v = 0 ou 255, clip se necessário
-	outData.resize(pixelsNum * 3);
-	for (size_t i = 0; i < pixelsNum; ++i) {
-		float v = gray[i];
-		if (v < 0.0f)
-			v = 0.0f;
-		if (v > 255.0f)
-			v = 255.0f;
-		unsigned char u = static_cast<unsigned char>(v < 128.0f ? 0 : 255);
-		outData[3 * i] = u;
-		outData[3 * i + 1] = u;
-		outData[3 * i + 2] = u;
 	}
 }
 
 int main(void) {
-	std::vector<unsigned char> data;
+	std::vector<RGB> data;
 	int width, height, maxValue;
-	if (!readPPM("output.ppm", width, height, maxValue, data)) {
+	if (!readPPM("output.ppm", data, width, height, maxValue)) {
 		return 1;
 	}
 
-	std::vector<unsigned char> output;
+	std::vector<RGB> output;
 	atkinsonDither(data, output, width, height);
 	if (!writePPM("dithering.ppm", output, width, height, maxValue)) {
 		return 1;

@@ -15,14 +15,13 @@ float *solution = nullptr;
 float maxValue = 1.0f;
 
 // Ponto central do gráfico (alvo). Ajuste conforme a posição real do seu gráfico.
-// Por exemplo, se a superfície está centrada em (1, 0, 0.5) no mundo, use esses valores.
 // Aqui assumo centro em (1.0f, 0.0f, 0.5f) ou simplesmente (0,0,0) se você transladar a malha.
-float targetX = 0.0f, targetY = 0.0f, targetZ = 0.0f;
+float targetX = 0.0f, targetY = 1.5f, targetZ = 0.0f;
 
 // Parâmetros polares da câmera em torno do alvo
-float radius = 5.0f; // distância inicial entre câmera e alvo
+float radius = 12.0f; // distância inicial entre câmera e alvo
 float azimuth = 0.0f; // ângulo horizontal em graus (gira em torno do eixo Y do alvo)
-float elevation = 20.0f; // ângulo vertical em graus (inclinação acima do plano XZ)
+float elevation = 10.0f; // ângulo vertical em graus (inclinação acima do plano XZ)
 
 // Vetor “up” fixo. Normalmente (0,1,0).
 float upX = 0.0f, upY = 1.0f, upZ = 0.0f;
@@ -150,15 +149,15 @@ void drawAxes() {
 	glVertex3f(0.0f, 0.0f, 0.0f);
 	glVertex3f(2.2f, 0.0f, 0.0f);
 
-	// Eixo Y - verde
-	glColor3f(0.0f, 1.0f, 0.0f);
-	glVertex3f(0.0f, 0.0f, 0.0f);
-	glVertex3f(0.0f, maxValue * 1.f, 0.0f);
-
-	// Eixo Z - azul
+	// Eixo Y - azul
 	glColor3f(0.0f, 0.0f, 1.0f);
 	glVertex3f(0.0f, 0.0f, 0.0f);
 	glVertex3f(0.0f, 0.0f, 1.2f);
+
+	// Eixo Z - verde
+	glColor3f(0.0f, 1.0f, 0.0f);
+	glVertex3f(0.0f, 0.0f, 0.0f);
+	glVertex3f(0.0f, maxValue * 1.f, 0.0f);
 
 	glEnd();
 	glLineWidth(1.0f);
@@ -267,12 +266,12 @@ void keyboard(unsigned char key, int x, int y) {
 	// Recentralizar orbit
 	case 'r':
 	case 'R':
-		radius = 5.0f;
+		radius = 12.0f;
 		azimuth = 0.0f;
-		elevation = 20.0f;
-		targetX = 1.0f;
-		targetY = 0.0f;
-		targetZ = 0.5f;
+		elevation = 10.0f;
+		targetX = 0.0f;
+		targetY = 1.5f;
+		targetZ = 0.f;
 		meshRotX = meshRotY = 0.0f;
 		break;
 	};
@@ -282,16 +281,16 @@ void keyboard(unsigned char key, int x, int y) {
 void specialKeys(int key, int x, int y) {
 	switch (key) {
 	case GLUT_KEY_LEFT:
-		targetX -= panSpeed;
-		break;
-	case GLUT_KEY_RIGHT:
 		targetX += panSpeed;
 		break;
+	case GLUT_KEY_RIGHT:
+		targetX -= panSpeed;
+		break;
 	case GLUT_KEY_UP:
-		targetZ -= panSpeed;
+		targetZ += panSpeed;
 		break;
 	case GLUT_KEY_DOWN:
-		targetZ += panSpeed;
+		targetZ -= panSpeed;
 		break;
 	case GLUT_KEY_PAGE_UP:
 		targetY += panSpeed;
@@ -326,14 +325,13 @@ int main(int argc, char **argv) {
 	maxValue = getMaxSolutionValue();
 
 	std::cout << "Controles:\n";
-	std::cout << "Setas: Rotacionar visualização\n";
-	std::cout << "+/-: Zoom in/out\n";
-	std::cout << "W/w: Alternar modo wireframe\n";
-	std::cout << "x/X: Aumentar/diminuir escala X\n";
-	std::cout << "y/Y: Aumentar/diminuir escala Y\n";
-	std::cout << "z/Z: Aumentar/diminuir escala Z\n";
-	std::cout << "s/S: Aumentar/diminuir escala uniforme\n";
-	std::cout << "R: Resetar visualização\n";
+	std::cout << "w/a/s/d: Rotacionar visualização\n";
+	std::cout << "f/F: Alternar modo wireframe\n";
+	std::cout << "u/U: Aproxima\n";
+	std::cout << "j/J: Afasta\n";
+	std::cout << "i/I: Desloca para baixo\n";
+	std::cout << "k/K: Desloca para cima\n";
+	std::cout << "r/R: Resetar visualização\n";
 	std::cout << "ESC: Sair\n";
 
 	// Registra callbacks

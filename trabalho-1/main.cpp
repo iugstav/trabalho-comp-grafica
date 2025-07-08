@@ -2,234 +2,224 @@
 #include <GL/glut.h>
 #include <cmath>
 #include <iostream>
+#include <vector>
 
-// Parâmetros da malha
-const int N = 50; // número de divisões em x [0,2]
-const int M = 25; // número de divisões em y [0,1]
-const float h = 2.0f / float(N); // número de passos em x
-const float k = 1.0f / float(M); // número de passos em y
+// Parâmetros da malha e domínio
+const int N = 50; // divisões em x [0,XMAX]
+const int M = 25; // divisões em y [0,YMAX]
+const float XMAX = 4.0f;
+const float YMAX = 2.0f;
 
-// Variáveis globais
-float *solution = nullptr;
+// Parâmetros de câmera
+float targetX = 0.0f, targetY = 0.5f * YMAX, targetZ = 0.0f;
+float radius = 12.0f;
+float azimuth = 45.0f;
+float elevation = 30.0f;
 
-float maxValue = 1.0f;
-
-// Ponto central do gráfico (alvo). Ajuste conforme a posição real do seu gráfico.
-// Por exemplo, se a superfície está centrada em (1, 0, 0.5) no mundo, use esses valores.
-// Aqui assumo centro em (1.0f, 0.0f, 0.5f) ou simplesmente (0,0,0) se você transladar a malha.
-float targetX = 0.0f, targetY = 0.0f, targetZ = 0.0f;
-
-// Parâmetros polares da câmera em torno do alvo
-float radius = 5.0f; // distância inicial entre câmera e alvo
-float azimuth = 0.0f; // ângulo horizontal em graus (gira em torno do eixo Y do alvo)
-float elevation = 20.0f; // ângulo vertical em graus (inclinação acima do plano XZ)
-
-// Vetor “up” fixo. Normalmente (0,1,0).
-float upX = 0.0f, upY = 1.0f, upZ = 0.0f;
-
-// Parâmetros de sensibilidade
-const float angularSpeed = 5.0f; // graus por tecla para azimuth/elevation
-const float zoomSpeed = 0.5f; // quanto muda o radius por tecla
+// Sensibilidades
+const float angularSpeed = 5.0f;
+const float zoomSpeed = 0.5f;
 const float panSpeed = 0.1f;
 
-float meshRotX = 0.0f; // rotação da malha em torno do eixo X local
-float meshRotY = 0.0f; // rotação da malha em torno do eixo Y local
-
-// visualização do wireframe
+// Wireframe toggle
 bool wireframe = false;
 
-// Função para converter índices da malha (i,j) para coordenadas (x,y)
+// Estrutura de vértice (posição + cor)
+struct Vertex {
+	float pos[3];
+	float col[3];
+};
+
+// Arrays de vértices e índices
+static std::vector<Vertex> vertices;
+static std::vector<GLuint> indices;
+
+// Valor máximo para normalização de cor
+float maxValue = 1.0f;
+
+// Converte (i,j) em coordenadas x,y
 void getCoordinates(int i, int j, float &x, float &y) {
-	x = (float)i * h;
-	y = (float)j * k;
+	x = (XMAX * i) / float(N);
+	y = (YMAX * j) / float(M);
 }
 
-// Função para obter o valor da solução no ponto (i,j)
+// Obtém valor da solução (inclui contorno)
 float getSolutionValue(int i, int j) {
-	// Pontos interiores da malha
-	if (i > 0 && i < N && j > 0 && j < M) {
-		return solution[(i - 1) + (j - 1) * (N - 1)];
-	}
-
-	float x, y;
-	getCoordinates(i, j, x, y);
-
-	// Condições de contorno
+	// contornos:
 	if (i == 0)
-		return 0.0f; // u(0,y) = 0
+		return 0.0f;
 	if (i == N)
-		return 2.0f * expf(y); // u(2,y) = 2e^y
+		return 2.0f * expf((YMAX * j) / M);
 	if (j == 0)
-		return x; // u(x,0) = x
+		return (XMAX * i) / N;
 	if (j == M)
-		return expf(x); // u(x,1) = e^x
-
-	return 0.0f; // Nunca deve chegar aqui
+		return expf((XMAX * i) / N);
+	// interior: sol armazenada em vertices
+	int idx = i * (M + 1) + j;
+	return vertices[idx].pos[1];
 }
 
-// Calcula o valor máximo da solução para normalização
-float getMaxSolutionValue() {
-	float maxVal = 0.0f;
-	// Verificar pontos interiores
-	for (int idx = 0; idx < (N - 1) * (M - 1); idx++) {
-		if (fabs(solution[idx]) > maxVal)
-			maxVal = fabs(solution[idx]);
-	}
-
-	// Verificar condições de contorno
-	float x, y;
-	for (int i = 0; i <= N; i++) {
-		for (int j = 0; j <= M; j++) {
-			getCoordinates(i, j, x, y);
-			if (i == N) { // u(2,y) = 2e^y
-				float val = 2.0f * expf(y);
-				maxVal = std::max(maxVal, val);
-			}
-			if (j == M) { // u(x,1) = e^x
-				float val = expf(x);
-				maxVal = std::max(maxVal, val);
-			}
-		}
-	}
-
-	return maxVal;
+// Calcula maxValue após geração de dados
+float computeMaxValue() {
+	float mv = 0.0f;
+	for (auto &v : vertices)
+		mv = std::max(mv, fabsf(v.pos[1]));
+	return mv;
 }
 
-// Atribui uma cor conforme o valor da função
-void setColorByValue(float value, float maxValue) {
-	// Normaliza o valor entre 0 e 1
-	float normalizedValue = 0.5f * (value / maxValue + 1.0f);
-
-	// Mapa de cores HSV-like (do azul ao vermelho)
-	if (normalizedValue < 0.25f) {
-		// Azul para ciano
-		glColor3f(0.0f, 4.0f * normalizedValue, 1.0f);
-	} else if (normalizedValue < 0.5f) {
-		// Ciano para verde
-		glColor3f(0.0f, 1.0f, 1.0f - 4.0f * (normalizedValue - 0.25f));
-	} else if (normalizedValue < 0.75f) {
-		// Verde para amarelo
-		glColor3f(4.0f * (normalizedValue - 0.5f), 1.0f, 0.0f);
+// Mapeia valor para cor RGB
+void valueToColor(float s, float &r, float &g, float &b) {
+	float norm = 0.5f * (s / maxValue + 1.0f);
+	if (norm < 0.25f) {
+		r = 0.0f;
+		g = 4.0f * norm;
+		b = 1.0f;
+	} else if (norm < 0.5f) {
+		r = 0.0f;
+		g = 1.0f;
+		b = 1.0f - 4.0f * (norm - 0.25f);
+	} else if (norm < 0.75f) {
+		r = 4.0f * (norm - 0.5f);
+		g = 1.0f;
+		b = 0.0f;
 	} else {
-		// Amarelo para vermelho
-		glColor3f(1.0f, 1.0f - 4.0f * (normalizedValue - 0.75f), 0.0f);
+		r = 1.0f;
+		g = 1.0f - 4.0f * (norm - 0.75f);
+		b = 0.0f;
 	}
 }
 
-void drawMesh() {
-	// Desenha faixas entre i e i+1
-	for (int i = 0; i < N; ++i) {
-		glBegin(GL_TRIANGLE_STRIP);
+// Prepara buffers de vértices e índices
+void buildMesh() {
+	// gera vértices
+	vertices.resize((N + 1) * (M + 1));
+	for (int i = 0; i <= N; ++i) {
 		for (int j = 0; j <= M; ++j) {
-			// ponto (i, j)
-			float x1, y1;
-			getCoordinates(i, j, x1, y1);
-			float s1 = getSolutionValue(i, j);
-			// ponto (i+1, j)
-			float x2, y2;
-			getCoordinates(i + 1, j, x2, y2);
-			float s2 = getSolutionValue(i + 1, j);
+			int idx = i * (M + 1) + j;
+			float x, y;
+			getCoordinates(i, j, x, y);
+			float s;
 
-			// Vértice: X, altura (s), profundidade (y)
-			setColorByValue(s1, maxValue);
-			glVertex3f(x1, s1, y1);
+			// condição de contorno / interior (temporariamente setar s)
+			if (i == 0 || i == N || j == 0 || j == M)
+				s = getSolutionValue(i, j);
+			else
+				s = 0.0f; // placeholder, será preenchido por SolPoisson
 
-			setColorByValue(s2, maxValue);
-			glVertex3f(x2, s2, y2);
+			vertices[idx].pos[0] = x;
+			vertices[idx].pos[1] = s;
+			vertices[idx].pos[2] = y;
 		}
-		glEnd();
+	}
+
+	// executa SolPoisson para interiores
+	std::vector<float> sol((N - 1) * (M - 1));
+	SolPoisson(N, M, sol.data());
+
+	int k = 0;
+	for (int j = 1; j < M; ++j)
+		for (int i = 1; i < N; ++i) {
+			int idx = i * (M + 1) + j;
+			vertices[idx].pos[1] = sol[k++];
+		}
+
+	// calcula maxValue
+	maxValue = computeMaxValue();
+	// aplica cor
+	for (auto &v : vertices) {
+		float r, g, b;
+		valueToColor(v.pos[1], r, g, b);
+		v.col[0] = r;
+		v.col[1] = g;
+		v.col[2] = b;
+	}
+
+	// gera índices (2 triângulos por célula)
+	indices.clear();
+	indices.reserve(N * M * 6);
+	for (int i = 0; i < N; ++i) {
+		for (int j = 0; j < M; ++j) {
+			GLuint v0 = i * (M + 1) + j;
+			GLuint v1 = (i + 1) * (M + 1) + j;
+			GLuint v2 = (i + 1) * (M + 1) + (j + 1);
+			GLuint v3 = i * (M + 1) + (j + 1);
+			indices.insert(indices.end(), {v0, v1, v2, v0, v2, v3});
+		}
 	}
 }
 
 void drawAxes() {
 	glLineWidth(2.0f);
 	glBegin(GL_LINES);
-
-	// Eixo X - vermelho
-	glColor3f(1.0f, 0.0f, 0.0f);
-	glVertex3f(0.0f, 0.0f, 0.0f);
-	glVertex3f(2.2f, 0.0f, 0.0f);
-
-	// Eixo Y - verde
-	glColor3f(0.0f, 1.0f, 0.0f);
-	glVertex3f(0.0f, 0.0f, 0.0f);
-	glVertex3f(0.0f, maxValue * 1.f, 0.0f);
-
-	// Eixo Z - azul
-	glColor3f(0.0f, 0.0f, 1.0f);
-	glVertex3f(0.0f, 0.0f, 0.0f);
-	glVertex3f(0.0f, 0.0f, 1.2f);
-
+	// X - vermelho
+	glColor3f(1, 0, 0);
+	glVertex3f(0, 0, 0);
+	glVertex3f(XMAX * 1.1f, 0, 0);
+	// Y - azul
+	glColor3f(0, 0, 1);
+	glVertex3f(0, 0, 0);
+	glVertex3f(0, maxValue * 1.1f, 0);
+	// Z - verde
+	glColor3f(0, 1, 0);
+	glVertex3f(0, 0, 0);
+	glVertex3f(0, 0, YMAX * 1.1f);
 	glEnd();
 	glLineWidth(1.0f);
 }
 
-// Função para renderizar
 void display() {
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
+	// calcula posição da câmera
 	float radAz = azimuth * M_PI / 180.0f;
 	float radEl = elevation * M_PI / 180.0f;
-	// Cálculo da posição da câmera em coordenadas esféricas em torno do alvo:
-	// camX = targetX + radius * cos(elevation) * sin(azimuth)
-	// camY = targetY + radius * sin(elevation)
-	// camZ = targetZ + radius * cos(elevation) * cos(azimuth)
-	float cosEl = cos(radEl);
-	float sinEl = sin(radEl);
-	float cosAz = cos(radAz);
-	float sinAz = sin(radAz);
-
+	float cosEl = cos(radEl), sinEl = sin(radEl);
+	float cosAz = cos(radAz), sinAz = sin(radAz);
 	float camX = targetX + radius * cosEl * sinAz;
 	float camY = targetY + radius * sinEl;
 	float camZ = targetZ + radius * cosEl * cosAz;
-
-	// Configura view matrix com gluLookAt
 	glMatrixMode(GL_MODELVIEW);
 	glLoadIdentity();
-	gluLookAt(camX, camY, camZ, targetX, targetY, targetZ, upX, upY, upZ);
+	gluLookAt(camX, camY, camZ, targetX, targetY, targetZ, 0, 1, 0);
 
-	// Define o modo de desenho
-	if (wireframe) {
-		glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-	} else {
-		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-	}
-
-	glPushMatrix();
-	glTranslatef(-targetX, -targetY, -targetZ);
-	glRotatef(meshRotX, 1, 0, 0);
-	glRotatef(meshRotY, 0, 1, 0);
-
+	// eixos
 	drawAxes();
-	drawMesh();
-	glPopMatrix();
+
+	// mesh com vertex arrays
+	if (wireframe)
+		glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+	else
+		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+
+	glEnableClientState(GL_VERTEX_ARRAY);
+	glEnableClientState(GL_COLOR_ARRAY);
+	glVertexPointer(3, GL_FLOAT, sizeof(Vertex), &vertices[0].pos);
+	glColorPointer(3, GL_FLOAT, sizeof(Vertex), &vertices[0].col);
+
+	glDrawElements(GL_TRIANGLES, GLsizei(indices.size()), GL_UNSIGNED_INT, &indices[0]);
+
+	glDisableClientState(GL_VERTEX_ARRAY);
+	glDisableClientState(GL_COLOR_ARRAY);
 
 	glutSwapBuffers();
 }
 
-void reshape(int width, int height) {
-	glViewport(0, 0, width, height);
+void reshape(int w, int h) {
+	glViewport(0, 0, w, h);
 	glMatrixMode(GL_PROJECTION);
 	glLoadIdentity();
-	gluPerspective(45.0f, (float)width / (float)height, 0.1f, 100.0f);
+	gluPerspective(45.0f, float(w) / h, 0.1f, 100.0f);
 	glMatrixMode(GL_MODELVIEW);
 }
 
 void keyboard(unsigned char key, int x, int y) {
 	switch (key) {
-	case 27: // ESC
-		delete[] solution;
+	case 27:
 		exit(0);
-		break;
-
-	// Zoom (muda radius)
-	case 'u': // aproxima
+	case 'u':
 	case 'U':
-		radius -= zoomSpeed;
-		if (radius < 0.1f)
-			radius = 0.1f; // evita radius <= 0
+		radius = std::max(0.1f, radius - zoomSpeed);
 		break;
-	case 'j': // afasta
+	case 'j':
 	case 'J':
 		radius += zoomSpeed;
 		break;
@@ -241,57 +231,52 @@ void keyboard(unsigned char key, int x, int y) {
 	case 'K':
 		targetY += panSpeed;
 		break;
-	// Rotação local da malha
 	case 'a':
 	case 'A':
-		meshRotY -= angularSpeed; // gira malha em torno de Y local
+		azimuth -= angularSpeed;
 		break;
 	case 'd':
 	case 'D':
-		meshRotY += angularSpeed;
+		azimuth += angularSpeed;
 		break;
 	case 'w':
 	case 'W':
-		meshRotX -= angularSpeed; // gira malha em torno de X local
+		elevation -= angularSpeed;
 		break;
 	case 's':
 	case 'S':
-		meshRotX += angularSpeed;
+		elevation += angularSpeed;
 		break;
-	// Alterna wireframe
 	case 'f':
 	case 'F':
 		wireframe = !wireframe;
 		break;
-
-	// Recentralizar orbit
 	case 'r':
 	case 'R':
-		radius = 5.0f;
-		azimuth = 0.0f;
-		elevation = 20.0f;
-		targetX = 1.0f;
-		targetY = 0.0f;
-		targetZ = 0.5f;
-		meshRotX = meshRotY = 0.0f;
+		radius = 12;
+		azimuth = 45;
+		elevation = 30;
+		targetX = 0;
+		targetY = 0.5f * YMAX;
+		targetZ = 0;
 		break;
-	};
+	}
 	glutPostRedisplay();
 }
 
 void specialKeys(int key, int x, int y) {
 	switch (key) {
 	case GLUT_KEY_LEFT:
-		targetX -= panSpeed;
-		break;
-	case GLUT_KEY_RIGHT:
 		targetX += panSpeed;
 		break;
+	case GLUT_KEY_RIGHT:
+		targetX -= panSpeed;
+		break;
 	case GLUT_KEY_UP:
-		targetZ -= panSpeed;
+		targetZ += panSpeed;
 		break;
 	case GLUT_KEY_DOWN:
-		targetZ += panSpeed;
+		targetZ -= panSpeed;
 		break;
 	case GLUT_KEY_PAGE_UP:
 		targetY += panSpeed;
@@ -299,51 +284,40 @@ void specialKeys(int key, int x, int y) {
 	case GLUT_KEY_PAGE_DOWN:
 		targetY -= panSpeed;
 		break;
-	default:
-		break;
 	}
-
 	glutPostRedisplay();
 }
 
 int main(int argc, char **argv) {
-	// Inicializa o GLUT
+	// Inicializa GLUT
 	glutInit(&argc, argv);
 	glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH);
 	glutInitWindowSize(800, 600);
 	glutCreateWindow("Visualização da Equação de Poisson");
 
-	// Configuração do OpenGL
-	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+	glClearColor(0, 0, 0, 1);
 	glEnable(GL_DEPTH_TEST);
 	glShadeModel(GL_SMOOTH);
 
-	// Aloca memória para a solução
-	solution = new float[(N - 1) * (M - 1)];
+	// Monta mesh de vértices e índices
+	buildMesh();
 
-	// Calcula a solução numérica
-	SolPoisson(N, M, solution);
-	maxValue = getMaxSolutionValue();
+	std::cout << "Controles:\n"
+		  << "w/a/s/d: rotacionar\n"
+		  << "f: wireframe\n"
+		  << "u/j: zoom in/out\n"
+		  << "i/k: pan vertical\n"
+		  << "setas: pan horizontal\n"
+		  << "r: reset\n"
+		  << "ESC: sair\n";
 
-	std::cout << "Controles:\n";
-	std::cout << "Setas: Rotacionar visualização\n";
-	std::cout << "+/-: Zoom in/out\n";
-	std::cout << "W/w: Alternar modo wireframe\n";
-	std::cout << "x/X: Aumentar/diminuir escala X\n";
-	std::cout << "y/Y: Aumentar/diminuir escala Y\n";
-	std::cout << "z/Z: Aumentar/diminuir escala Z\n";
-	std::cout << "s/S: Aumentar/diminuir escala uniforme\n";
-	std::cout << "R: Resetar visualização\n";
-	std::cout << "ESC: Sair\n";
-
-	// Registra callbacks
+	// Callbacks
 	glutDisplayFunc(display);
 	glutReshapeFunc(reshape);
 	glutKeyboardFunc(keyboard);
 	glutSpecialFunc(specialKeys);
 
-	// Inicia o loop principal
 	glutMainLoop();
-
 	return 0;
 }
+

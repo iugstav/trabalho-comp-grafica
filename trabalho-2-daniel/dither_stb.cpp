@@ -8,6 +8,10 @@
 
 using namespace std;
 
+int clamp(int value, int min_val, int max_val) {
+    return max(min_val, min(value, max_val));
+}
+
 void dithering(unsigned char *img, int width, int height) {
 	for (int y = 0; y < height; ++y) {
 		for (int x = 0; x < width; ++x) {
@@ -36,8 +40,8 @@ void dithering(unsigned char *img, int width, int height) {
 	}
 }
 int main() {
-	string input_file = "output.ppm";
-	string output_file = "saida.png";
+	string input_file = "cell.jpg";
+	string output_file = "cell_gray.png";
 
 	int width, height, channels;
 	unsigned char *img = stbi_load(input_file.c_str(), &width, &height, &channels, 1);
@@ -54,7 +58,7 @@ int main() {
 		stbi_image_free(img);
 		return 2;
 	}
-	cout << "Dithering concluído com sucesso.\n";
+	cout << "Dithering concluÃ­do com sucesso.\n";
 	cout << "Imagem salva como: " << output_file << "\n";
 
 	stbi_image_free(img);
